@@ -1,59 +1,70 @@
-import { motion } from "motion/react";
-import { useEffect, useState } from "react";
-import { IoSearchOutline } from "react-icons/io5";
+import { motion } from "framer-motion";
+import { useCallback, useRef, useState } from "react";
 import api from "../../utils/axios";
-import { Link } from "react-router-dom";
-import { ImCross } from "react-icons/im";
-import { useDebounce } from "@uidotdev/usehooks";
+import { useNavigate } from "react-router-dom";
+import GooeySearch from "../../components/ui/gooey-search";
+
+const getMovieTitle = (movie) => movie.name || movie.original_name || movie.original_title || movie.title || "Untitled";
+
+const getSearchLabel = (movie) => `${getMovieTitle(movie)} · ${movie.media_type?.toUpperCase() || "TITLE"}`;
+
+const getSearchImage = (movie) => {
+      const imagePath = movie.poster_path || movie.backdrop_path || movie.profile_path;
+      return imagePath ? `https://image.tmdb.org/t/p/w92/${imagePath}` : "/noImage.jpg";
+};
 
 const Search = () => {
       document.title = "Search For Anything You Love !";
-      const [query, setQuery] = useState("");
       const [movieData, setMovieData] = useState([]);
+      const [searchError, setSearchError] = useState("");
+      const requestId = useRef(0);
+      const navigate = useNavigate();
 
-      const debouncedQuery = useDebounce(query, 400);
-
-      const getSearches = async () => {
+      const searchMovies = useCallback(async (searchTerm) => {
+            const currentRequest = ++requestId.current;
             try {
-                  const { data } = await api.get(`/search/multi?query=${debouncedQuery}`);
-                  setMovieData(data.results);
-            } catch (error) {
-                  console.log(error.message);
+                  const { data } = await api.get(`/search/multi?query=${encodeURIComponent(searchTerm.trim())}`);
+                  const results = data.results;
+                  if (currentRequest === requestId.current) {
+                        setMovieData(results);
+                        setSearchError("");
+                  }
+                  return results.slice(0, 5).map((movie) => ({
+                        id: movie.id,
+                        mediaType: movie.media_type,
+                        image: getSearchImage(movie),
+                        label: getSearchLabel(movie),
+                  }));
+            } catch {
+                  if (currentRequest === requestId.current) {
+                        setMovieData([]);
+                        setSearchError("We couldn't load results right now. Try again in a moment.");
+                  }
+                  return [];
             }
-      };
+      }, []);
 
-      useEffect(() => {
-            if (debouncedQuery.length <= 0) {
-                  setMovieData([]);
-                  return;
-            }
-            getSearches();
-      }, [debouncedQuery]);
+      const handleSelect = useCallback(
+            (result) => {
+                  const selectedMovie = movieData.find((movie) => movie.id === result.id && movie.media_type === result.mediaType);
+                  if (selectedMovie) navigate(`/${selectedMovie.media_type}/details/${selectedMovie.id}`);
+            },
+            [movieData, navigate],
+      );
+
+      const handleClear = useCallback(() => {
+            requestId.current += 1;
+            setMovieData([]);
+            setSearchError("");
+      }, []);
 
       return (
             <>
-                  <section className="w-full min-h-dvh  [&::-webkit-scrollbar]:hidden flex flex-col items-center  [background-image:var(--bg-gradient)] ">
-                        <motion.div initial={{ y: -100 }} animate={{ y: 0, transition: { ease: "backInOut", duration: 0.5 } }} className="relative [&::-webkit-scrollbar]:hidden  top-3 lg:w-1/2 w-[80%]">
-                              <input value={query} onChange={(e) => setQuery(e.target.value)} autoFocus className="w-full text-[#F5CD80] pr-12 pl-14 outline-none font-primary border-none rounded-full md:rounded-2xl bg-[#412f2d]/30  caret-[#d0ab67] selection:bg-[#F5CD80] selection:text-black backdrop-blur-xl text-xl lg:text-2xl py-3" placeholder="Search for movies, tv shows, people" type="text" />
-                              <span className="absolute left-7 lg:top-4 top-3 -translate-x-1/2">
-                                    <IoSearchOutline color="#F5CD80" size="1.5rem" />
-                              </span>
-                              <motion.span whileTap={{ scale: 0.7 }} onClick={() => setQuery("")} className="absolute w-9 h-9 flex justify-center items-center right-3 top-2">
-                                    <ImCross color="#F5CD80" size="1rem" />
-                              </motion.span>
+                  <section className="flex min-h-dvh w-full flex-col items-center overflow-hidden [background-image:var(--bg-gradient)] px-4 pb-28 pt-10 font-primary">
+                        <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1, transition: { ease: "backInOut", duration: 0.5 } }} className="w-full max-w-xl">
+                              <GooeySearch onSearch={searchMovies} onSelect={handleSelect} onClear={handleClear} placeholder="e.g. Game of throne" buttonLabel="Search movies, TV shows, people" maxResults={10} />
                         </motion.div>
-                        <motion.div className="mb-20 space-y-10 mt-10 lg:w-1/2">
-                              {movieData?.map((eachMovie, index) => (
-                                    <Link to={`/${eachMovie.media_type}/details/${eachMovie.id}`} key={index} className="w-full text-white px-5 flex items-center gap-5 mt-3">
-                                          <div className="w-20 shrink-0 h-20 overflow-hidden rounded-md">
-                                                <img className="w-full h-full object-cover" src={eachMovie?.backdrop_path ? `https://image.tmdb.org/t/p/w185/${eachMovie?.backdrop_path}` : "/noImage.jpg"} alt="" />
-                                          </div>
-                                          <h2 className="leading-none text-2xl">
-                                                {eachMovie.name || eachMovie.original_name || eachMovie.original_title} <span className="text-sm font-bold border border-yellow-300 px-4 py-1 rounded-full text-yellow-300">{eachMovie?.media_type?.toUpperCase()}</span>
-                                          </h2>
-                                    </Link>
-                              ))}
-                        </motion.div>
+                        {searchError && <p className="mt-16 text-center text-sm text-primary-foreground/80">{searchError}</p>}
                   </section>
             </>
       );
