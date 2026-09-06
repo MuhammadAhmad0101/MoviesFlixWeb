@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { useCallback, useRef, useState } from "react";
 import api from "../../utils/axios";
 import { useNavigate } from "react-router-dom";
-import GooeySearch from "../../components/ui/gooey-search";
+import GooeySearch from "../../Components/ui/gooey-search";
 
 const getMovieTitle = (movie) => movie.name || movie.original_name || movie.original_title || movie.title || "Untitled";
 
